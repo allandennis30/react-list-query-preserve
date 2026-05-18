@@ -1,0 +1,11 @@
+stages:
+  - test
+
+test:
+  image: node:20
+  stage: test
+  script:
+    - corepack enable
+    - yarn install --immutable
+    - yarn build
+    - yarn test
