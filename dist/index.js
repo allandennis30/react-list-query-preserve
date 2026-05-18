@@ -53,6 +53,10 @@ function findPreserveConfig(pathname, routes) {
   const normalizedPath = normalizePath(pathname);
   return routes.find((route) => normalizePath(route.list) === normalizedPath);
 }
+function findListConfigForDetail(pathname, routes) {
+  const normalizedPath = normalizePath(pathname);
+  return routes.find((route) => matchesDetailRoute(normalizedPath, route.details));
+}
 
 // src/components/ListQueryPreserve.tsx
 import { Fragment, jsx } from "react/jsx-runtime";
@@ -102,6 +106,23 @@ function ListQueryPreserve({
     const isLeavingTrackedList = !!leavingConfig && matchesDetailRoute(currentPath, leavingConfig.details);
     if (canPreservePrev && isLeavingTrackedList && previous.search) {
       saveSearch(prevPath, previous.search, storage, keyPrefix);
+    }
+    const currentDetailConfig = findListConfigForDetail(currentPath, normalizedRoutes);
+    const isCurrentDetail = !!currentDetailConfig;
+    if (restoreStrategy === "router" && canPreserveCurrent && isCurrentDetail && !location.search && !restoringRef.current) {
+      const savedForDetail = getSearch(currentDetailConfig.list, storage, keyPrefix);
+      if (savedForDetail) {
+        const normalizedSaved = savedForDetail.startsWith("?") ? savedForDetail : `?${savedForDetail}`;
+        restoringRef.current = true;
+        navigate(
+          {
+            pathname: location.pathname,
+            search: normalizedSaved
+          },
+          { replace: true }
+        );
+        scheduleUnlock(restoringRef);
+      }
     }
     const returningConfig = findPreserveConfig(currentPath, normalizedRoutes);
     const isReturningToList = !!returningConfig && matchesDetailRoute(prevPath, returningConfig.details);

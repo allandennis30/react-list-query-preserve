@@ -11,3 +11,9 @@ export function findPreserveConfig(pathname: string, routes: PreserveRouteConfig
 
   return routes.find((route) => normalizePath(route.list) === normalizedPath);
 }
+
+export function findListConfigForDetail(pathname: string, routes: PreserveRouteConfig[]) {
+  const normalizedPath = normalizePath(pathname);
+
+  return routes.find((route) => matchesDetailRoute(normalizedPath, route.details));
+}

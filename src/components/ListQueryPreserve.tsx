@@ -2,7 +2,7 @@ import { ReactNode, useLayoutEffect, useMemo, useRef } from "react";
 import { Location, useLocation, useNavigate } from "react-router-dom";
 import { PreserveRouteConfig, RestoreStrategy, ShouldPreserve } from "../types";
 import { clearSearch, getSearch, normalizePath, saveSearch } from "../utils/storage";
-import { findPreserveConfig, matchesDetailRoute } from "../utils/routes";
+import { findListConfigForDetail, findPreserveConfig, matchesDetailRoute } from "../utils/routes";
 
 type Props = {
   children: ReactNode;
@@ -72,6 +72,37 @@ export function ListQueryPreserve({
 
     if (canPreservePrev && isLeavingTrackedList && previous.search) {
       saveSearch(prevPath, previous.search, storage, keyPrefix);
+    }
+
+    const currentDetailConfig = findListConfigForDetail(currentPath, normalizedRoutes);
+    const isCurrentDetail = !!currentDetailConfig;
+
+    if (
+      restoreStrategy === "router" &&
+      canPreserveCurrent &&
+      isCurrentDetail &&
+      !location.search &&
+      !restoringRef.current
+    ) {
+      const savedForDetail = getSearch(currentDetailConfig.list, storage, keyPrefix);
+
+      if (savedForDetail) {
+        const normalizedSaved = savedForDetail.startsWith("?")
+          ? savedForDetail
+          : `?${savedForDetail}`;
+
+        restoringRef.current = true;
+
+        navigate(
+          {
+            pathname: location.pathname,
+            search: normalizedSaved
+          },
+          { replace: true }
+        );
+
+        scheduleUnlock(restoringRef);
+      }
     }
 
     const returningConfig = findPreserveConfig(currentPath, normalizedRoutes);
