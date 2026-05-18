@@ -3,25 +3,15 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 // src/utils/storage.ts
-var DEFAULT_STORAGE_PREFIX = "lqp";
-var SNAPSHOT_TTL_MS = 30 * 60 * 1e3;
+var DEFAULT_STORAGE_PREFIX = "react-list-query-preserve:";
 function normalizePath(pathname) {
   if (pathname.length > 1 && pathname.endsWith("/")) {
     return pathname.slice(0, -1);
   }
   return pathname;
 }
-function normalizeSearch(search) {
-  if (!search) {
-    return "";
-  }
-  if (search === "?") {
-    return "";
-  }
-  return search.startsWith("?") ? search : `?${search}`;
-}
 function storageKey(pathname, keyPrefix = DEFAULT_STORAGE_PREFIX) {
-  return `${keyPrefix}:${normalizePath(pathname)}`;
+  return `${keyPrefix}${normalizePath(pathname)}`;
 }
 function getStorage(storage) {
   if (storage) {
@@ -37,33 +27,14 @@ function saveSearch(pathname, search, storage, keyPrefix) {
   if (!target) {
     return;
   }
-  const payload = {
-    search: normalizeSearch(search),
-    ts: Date.now()
-  };
-  target.setItem(storageKey(pathname, keyPrefix), JSON.stringify(payload));
+  target.setItem(storageKey(pathname, keyPrefix), search);
 }
 function getSearch(pathname, storage, keyPrefix) {
   const target = getStorage(storage);
   if (!target) {
     return null;
   }
-  const raw = target.getItem(storageKey(pathname, keyPrefix));
-  if (!raw) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    if (typeof parsed.search !== "string" || typeof parsed.ts !== "number") {
-      return normalizeSearch(raw);
-    }
-    if (Date.now() - parsed.ts > SNAPSHOT_TTL_MS) {
-      return null;
-    }
-    return normalizeSearch(parsed.search);
-  } catch {
-    return normalizeSearch(raw);
-  }
+  return target.getItem(storageKey(pathname, keyPrefix));
 }
 function clearSearch(pathname, storage, keyPrefix) {
   const target = getStorage(storage);
@@ -92,31 +63,6 @@ function normalizeRoutes(routes) {
     details: route.details
   }));
 }
-function hasEssentialPage(search) {
-  const normalized = normalizeSearch(search);
-  if (!normalized) {
-    return false;
-  }
-  const params = new URLSearchParams(normalized.slice(1));
-  return params.has("page");
-}
-function shouldRestoreSearch(currentSearch, savedSearch, forceRestoreOnListMount, preferCurrentSearch) {
-  const normalizedCurrent = normalizeSearch(currentSearch);
-  const normalizedSaved = normalizeSearch(savedSearch);
-  if (!normalizedSaved || normalizedCurrent === normalizedSaved) {
-    return false;
-  }
-  if (preferCurrentSearch && normalizedCurrent) {
-    return false;
-  }
-  if (!forceRestoreOnListMount) {
-    return !normalizedCurrent;
-  }
-  if (hasEssentialPage(normalizedSaved) && !hasEssentialPage(normalizedCurrent)) {
-    return true;
-  }
-  return !normalizedCurrent;
-}
 function scheduleUnlock(restoringRef) {
   try {
     Promise.resolve().then(() => {
@@ -132,8 +78,6 @@ function ListQueryPreserve({
   children,
   routes,
   restoreStrategy = "router",
-  forceRestoreOnListMount = true,
-  preferCurrentSearch = true,
   storage,
   shouldPreserve = DEFAULT_SHOULD_PRESERVE,
   cleanupOnLeave = false,
@@ -161,40 +105,40 @@ function ListQueryPreserve({
     }
     const returningConfig = findPreserveConfig(currentPath, normalizedRoutes);
     const isReturningToList = !!returningConfig && matchesDetailRoute(prevPath, returningConfig.details);
-    if (canPreserveCurrent && isReturningToList && !restoringRef.current) {
+    if (restoreStrategy === "router" && canPreserveCurrent && isReturningToList && !location.search && !restoringRef.current) {
       const saved = getSearch(currentPath, storage, keyPrefix);
-      if (saved && shouldRestoreSearch(location.search, saved, forceRestoreOnListMount, preferCurrentSearch)) {
-        restoringRef.current = true;
-        if (restoreStrategy === "router") {
+      if (saved) {
+        const search = saved.startsWith("?") ? saved : `?${saved}`;
+        if (!(location.pathname === currentPath && location.search === search)) {
+          restoringRef.current = true;
           navigate(
             {
               pathname: currentPath,
-              search: saved
+              search
             },
             { replace: true }
           );
-        } else if (restoreStrategy === "history" && typeof window !== "undefined") {
-          window.history.replaceState({}, "", `${currentPath}${saved}`);
+          scheduleUnlock(restoringRef);
         }
-        scheduleUnlock(restoringRef);
       }
     }
+    const isTrackedList = normalizedRoutes.some((route) => route.list === currentPath);
+    if (isTrackedList && !location.search && !isReturningToList) {
+      clearSearch(currentPath, storage, keyPrefix);
+    }
     if (cleanupOnLeave) {
-      const isTrackedList = normalizedRoutes.some((route) => route.list === prevPath);
-      const isCurrentInSameFlow = !!findPreserveConfig(currentPath, normalizedRoutes) || isLeavingTrackedList;
-      if (isTrackedList && !isCurrentInSameFlow && prevPath !== currentPath) {
+      const leftListFlow = !!leavingConfig && !isLeavingTrackedList && prevPath !== currentPath;
+      if (leftListFlow) {
         clearSearch(prevPath, storage, keyPrefix);
       }
     }
     previousRef.current = location;
   }, [
     cleanupOnLeave,
-    forceRestoreOnListMount,
     keyPrefix,
     location,
     navigate,
     normalizedRoutes,
-    preferCurrentSearch,
     restoreStrategy,
     shouldPreserve,
     storage

@@ -1,10 +1,4 @@
-const DEFAULT_STORAGE_PREFIX = "lqp";
-const SNAPSHOT_TTL_MS = 30 * 60 * 1000;
-
-type SearchSnapshot = {
-  search: string;
-  ts: number;
-};
+const DEFAULT_STORAGE_PREFIX = "react-list-query-preserve:";
 
 export function normalizePath(pathname: string) {
   if (pathname.length > 1 && pathname.endsWith("/")) {
@@ -14,20 +8,8 @@ export function normalizePath(pathname: string) {
   return pathname;
 }
 
-export function normalizeSearch(search: string) {
-  if (!search) {
-    return "";
-  }
-
-  if (search === "?") {
-    return "";
-  }
-
-  return search.startsWith("?") ? search : `?${search}`;
-}
-
 export function storageKey(pathname: string, keyPrefix = DEFAULT_STORAGE_PREFIX) {
-  return `${keyPrefix}:${normalizePath(pathname)}`;
+  return `${keyPrefix}${normalizePath(pathname)}`;
 }
 
 export function getStorage(storage?: Storage) {
@@ -49,12 +31,7 @@ export function saveSearch(pathname: string, search: string, storage?: Storage, 
     return;
   }
 
-  const payload: SearchSnapshot = {
-    search: normalizeSearch(search),
-    ts: Date.now()
-  };
-
-  target.setItem(storageKey(pathname, keyPrefix), JSON.stringify(payload));
+  target.setItem(storageKey(pathname, keyPrefix), search);
 }
 
 export function getSearch(pathname: string, storage?: Storage, keyPrefix?: string) {
@@ -64,27 +41,7 @@ export function getSearch(pathname: string, storage?: Storage, keyPrefix?: strin
     return null;
   }
 
-  const raw = target.getItem(storageKey(pathname, keyPrefix));
-
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as SearchSnapshot;
-
-    if (typeof parsed.search !== "string" || typeof parsed.ts !== "number") {
-      return normalizeSearch(raw);
-    }
-
-    if (Date.now() - parsed.ts > SNAPSHOT_TTL_MS) {
-      return null;
-    }
-
-    return normalizeSearch(parsed.search);
-  } catch {
-    return normalizeSearch(raw);
-  }
+  return target.getItem(storageKey(pathname, keyPrefix));
 }
 
 export function clearSearch(pathname: string, storage?: Storage, keyPrefix?: string) {
