@@ -21,3 +21,12 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Unit and integration test coverage with Vitest.
 
 [1.0.0]: https://github.com/<org>/react-list-query-preserve/releases/tag/v1.0.0
+
+## [1.0.1] - 2026-05-18
+
+### Fixed
+
+- Include `dist/` artifacts in repository for GitHub tag installation compatibility.
+- Ensure runtime and TypeScript declarations are available when consuming via `github:<user>/<repo>#tag`.
+
+[1.0.1]: https://github.com/allandennis30/react-list-query-preserve/releases/tag/v1.0.1

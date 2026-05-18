@@ -1,6 +1,6 @@
 {
   "name": "react-list-query-preserve",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Preserve list query params across list/detail navigation in React Router.",
   "license": "MIT",
   "type": "module",
