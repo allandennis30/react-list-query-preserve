@@ -116,7 +116,7 @@ function ListQueryPreserve({
   const previousRef = (0, import_react.useRef)(null);
   const restoringRef = (0, import_react.useRef)(false);
   const normalizedRoutes = (0, import_react.useMemo)(() => normalizeRoutes(routes), [routes]);
-  (0, import_react.useEffect)(() => {
+  (0, import_react.useLayoutEffect)(() => {
     const previous = previousRef.current;
     if (!previous) {
       previousRef.current = location;
@@ -151,7 +151,7 @@ function ListQueryPreserve({
       }
     }
     const isTrackedList = normalizedRoutes.some((route) => route.list === currentPath);
-    if (isTrackedList && !location.search) {
+    if (isTrackedList && !location.search && !isReturningToList) {
       clearSearch(currentPath, storage, keyPrefix);
     }
     if (cleanupOnLeave) {

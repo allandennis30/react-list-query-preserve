@@ -1,5 +1,5 @@
 // src/components/ListQueryPreserve.tsx
-import { useEffect, useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 // src/utils/storage.ts
@@ -88,7 +88,7 @@ function ListQueryPreserve({
   const previousRef = useRef(null);
   const restoringRef = useRef(false);
   const normalizedRoutes = useMemo(() => normalizeRoutes(routes), [routes]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previous = previousRef.current;
     if (!previous) {
       previousRef.current = location;
@@ -123,7 +123,7 @@ function ListQueryPreserve({
       }
     }
     const isTrackedList = normalizedRoutes.some((route) => route.list === currentPath);
-    if (isTrackedList && !location.search) {
+    if (isTrackedList && !location.search && !isReturningToList) {
       clearSearch(currentPath, storage, keyPrefix);
     }
     if (cleanupOnLeave) {
