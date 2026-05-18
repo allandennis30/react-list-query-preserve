@@ -6,19 +6,21 @@ type PreserveRouteConfig = {
     list: string;
     details: string[];
 };
-type RestoreStrategy = "router" | "memory";
+type RestoreStrategy = "router" | "history" | "none";
 type ShouldPreserve = (pathname: string) => boolean;
 
 type Props = {
     children: ReactNode;
     routes: PreserveRouteConfig[];
     restoreStrategy?: RestoreStrategy;
+    forceRestoreOnListMount?: boolean;
+    preferCurrentSearch?: boolean;
     storage?: Storage;
     shouldPreserve?: ShouldPreserve;
     cleanupOnLeave?: boolean;
     keyPrefix?: string;
 };
-declare function ListQueryPreserve({ children, routes, restoreStrategy, storage, shouldPreserve, cleanupOnLeave, keyPrefix }: Props): react_jsx_runtime.JSX.Element;
+declare function ListQueryPreserve({ children, routes, restoreStrategy, forceRestoreOnListMount, preferCurrentSearch, storage, shouldPreserve, cleanupOnLeave, keyPrefix }: Props): react_jsx_runtime.JSX.Element;
 
 type Options = {
     storage?: Storage;

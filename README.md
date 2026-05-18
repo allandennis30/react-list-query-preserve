@@ -33,7 +33,12 @@ const preserveRoutes = [
 
 export function AppRoot() {
   return (
-    <ListQueryPreserve routes={preserveRoutes}>
+    <ListQueryPreserve
+      routes={preserveRoutes}
+      restoreStrategy="router"
+      forceRestoreOnListMount
+      preferCurrentSearch
+    >
       <App />
     </ListQueryPreserve>
   );
@@ -59,11 +64,13 @@ import { useEffectiveSearchParams } from "react-list-query-preserve";
 ### `ListQueryPreserve`
 
 - `routes: PreserveRouteConfig[]`
-- `restoreStrategy?: "router" | "memory"` (default: `"router"`)
+- `restoreStrategy?: "router" | "history" | "none"` (default: `"router"`)
+- `forceRestoreOnListMount?: boolean` (default: `true`)
+- `preferCurrentSearch?: boolean` (default: `true`)
 - `storage?: Storage` (default: `window.sessionStorage`)
 - `shouldPreserve?: (pathname: string) => boolean` (default: sempre `true`)
 - `cleanupOnLeave?: boolean` (default: `false`)
-- `keyPrefix?: string` (default: `"react-list-query-preserve:"`)
+- `keyPrefix?: string` (default: `"lqp"`)
 
 ### `usePreservedSearchParams(options?)`
 
@@ -76,12 +83,20 @@ import { useEffectiveSearchParams } from "react-list-query-preserve";
 
 Restaura a query na URL ao retornar para a lista (`navigate(..., { replace: true })`).
 
-### `restoreStrategy="memory"`
+### `restoreStrategy="history"`
+
+Restaura com `window.history.replaceState` (fallback opcional browser-only).
+
+### `restoreStrategy="none"`
 
 Nao altera a URL. O hook retorna params preservados virtualmente.
 
-`memory` prioriza continuidade de navegacao sobre sincronizacao de URL.
-URL e estado efetivo podem divergir, entao reload/compartilhamento pode nao refletir o estado preservado.
+### Regras de restauracao
+
+- A lib salva snapshot no fluxo `list -> details`.
+- A restauracao acontece apenas no fluxo `details -> list`.
+- Se query atual ja estiver valida e `preferCurrentSearch=true`, nao sobrescreve.
+- Com `forceRestoreOnListMount=true`, restaura quando a lista volta sem `page` e o snapshot tinha `page`.
 
 ### Estabilidade de `routes`
 

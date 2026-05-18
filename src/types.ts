@@ -3,6 +3,6 @@ export type PreserveRouteConfig = {
   details: string[];
 };
 
-export type RestoreStrategy = "router" | "memory";
+export type RestoreStrategy = "router" | "history" | "none";
 
 export type ShouldPreserve = (pathname: string) => boolean;

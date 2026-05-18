@@ -22,6 +22,7 @@ function ListView() {
   return (
     <div>
       <button onClick={() => navigate("/products/1")}>Go detail</button>
+      <button onClick={() => navigate("/products?page=2")}>Go list page 2</button>
       <button onClick={() => navigate("/other")}>Go other</button>
     </div>
   );
@@ -29,6 +30,10 @@ function ListView() {
 
 function DetailBackNoQuery() {
   return <Navigate to={{ pathname: "/products", search: "" }} replace />;
+}
+
+function DetailBackWithQuery() {
+  return <Navigate to={{ pathname: "/products", search: "?page=2" }} replace />;
 }
 
 function EffectiveParamsProbe() {
@@ -41,7 +46,7 @@ describe("ListQueryPreserve integration", () => {
 
   it("restores query via router strategy", () => {
     render(
-      <MemoryRouter initialEntries={["/products?page=2"]}>
+      <MemoryRouter initialEntries={["/products?page=5"]}>
         <ListQueryPreserve routes={routes} restoreStrategy="router">
           <Routes>
             <Route path="/products" element={<><ListView /><LocationProbe /></>} />
@@ -52,13 +57,29 @@ describe("ListQueryPreserve integration", () => {
     );
 
     fireEvent.click(screen.getByText("Go detail"));
+    expect(screen.getByTestId("location").textContent).toBe("/products?page=5");
+  });
+
+  it("keeps current list query when preferCurrentSearch is true", () => {
+    render(
+      <MemoryRouter initialEntries={["/products?page=5"]}>
+        <ListQueryPreserve routes={routes} restoreStrategy="router" preferCurrentSearch>
+          <Routes>
+            <Route path="/products" element={<><ListView /><LocationProbe /></>} />
+            <Route path="/products/:id" element={<DetailBackWithQuery />} />
+          </Routes>
+        </ListQueryPreserve>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByText("Go detail"));
     expect(screen.getByTestId("location").textContent).toBe("/products?page=2");
   });
 
-  it("keeps URL unchanged in memory strategy while hook provides effective params", () => {
+  it("keeps URL unchanged when restoreStrategy is none", () => {
     render(
       <MemoryRouter initialEntries={["/products?page=3"]}>
-        <ListQueryPreserve routes={routes} restoreStrategy="memory">
+        <ListQueryPreserve routes={routes} restoreStrategy="none">
           <Routes>
             <Route path="/products" element={<><ListView /><LocationProbe /><EffectiveParamsProbe /></>} />
             <Route path="/products/:id" element={<DetailBackNoQuery />} />

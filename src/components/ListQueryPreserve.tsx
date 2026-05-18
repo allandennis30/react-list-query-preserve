@@ -1,13 +1,15 @@
 import { ReactNode, useLayoutEffect, useMemo, useRef } from "react";
 import { Location, useLocation, useNavigate } from "react-router-dom";
 import { PreserveRouteConfig, RestoreStrategy, ShouldPreserve } from "../types";
-import { clearSearch, getSearch, normalizePath, saveSearch } from "../utils/storage";
+import { clearSearch, getSearch, normalizePath, normalizeSearch, saveSearch } from "../utils/storage";
 import { findPreserveConfig, matchesDetailRoute } from "../utils/routes";
 
 type Props = {
   children: ReactNode;
   routes: PreserveRouteConfig[];
   restoreStrategy?: RestoreStrategy;
+  forceRestoreOnListMount?: boolean;
+  preferCurrentSearch?: boolean;
   storage?: Storage;
   shouldPreserve?: ShouldPreserve;
   cleanupOnLeave?: boolean;
@@ -21,6 +23,40 @@ function normalizeRoutes(routes: PreserveRouteConfig[]) {
     list: normalizePath(route.list),
     details: route.details
   }));
+}
+
+function hasEssentialPage(search: string) {
+  const normalized = normalizeSearch(search);
+
+  if (!normalized) {
+    return false;
+  }
+
+  const params = new URLSearchParams(normalized.slice(1));
+  return params.has("page");
+}
+
+function shouldRestoreSearch(currentSearch: string, savedSearch: string, forceRestoreOnListMount: boolean, preferCurrentSearch: boolean) {
+  const normalizedCurrent = normalizeSearch(currentSearch);
+  const normalizedSaved = normalizeSearch(savedSearch);
+
+  if (!normalizedSaved || normalizedCurrent === normalizedSaved) {
+    return false;
+  }
+
+  if (preferCurrentSearch && normalizedCurrent) {
+    return false;
+  }
+
+  if (!forceRestoreOnListMount) {
+    return !normalizedCurrent;
+  }
+
+  if (hasEssentialPage(normalizedSaved) && !hasEssentialPage(normalizedCurrent)) {
+    return true;
+  }
+
+  return !normalizedCurrent;
 }
 
 function scheduleUnlock(restoringRef: React.MutableRefObject<boolean>) {
@@ -39,6 +75,8 @@ export function ListQueryPreserve({
   children,
   routes,
   restoreStrategy = "router",
+  forceRestoreOnListMount = true,
+  preferCurrentSearch = true,
   storage,
   shouldPreserve = DEFAULT_SHOULD_PRESERVE,
   cleanupOnLeave = false,
@@ -66,7 +104,6 @@ export function ListQueryPreserve({
     const canPreserveCurrent = shouldPreserve(currentPath);
 
     const leavingConfig = findPreserveConfig(prevPath, normalizedRoutes);
-
     const isLeavingTrackedList =
       !!leavingConfig && matchesDetailRoute(currentPath, leavingConfig.details);
 
@@ -75,49 +112,43 @@ export function ListQueryPreserve({
     }
 
     const returningConfig = findPreserveConfig(currentPath, normalizedRoutes);
-
     const isReturningToList =
       !!returningConfig && matchesDetailRoute(prevPath, returningConfig.details);
 
     if (
-      restoreStrategy === "router" &&
       canPreserveCurrent &&
       isReturningToList &&
-      !location.search &&
       !restoringRef.current
     ) {
       const saved = getSearch(currentPath, storage, keyPrefix);
 
-      if (saved) {
-        const search = saved.startsWith("?") ? saved : `?${saved}`;
+      if (
+        saved &&
+        shouldRestoreSearch(location.search, saved, forceRestoreOnListMount, preferCurrentSearch)
+      ) {
+        restoringRef.current = true;
 
-        if (!(location.pathname === currentPath && location.search === search)) {
-          restoringRef.current = true;
-
+        if (restoreStrategy === "router") {
           navigate(
             {
               pathname: currentPath,
-              search
+              search: saved
             },
             { replace: true }
           );
-
-          scheduleUnlock(restoringRef);
+        } else if (restoreStrategy === "history" && typeof window !== "undefined") {
+          window.history.replaceState({}, "", `${currentPath}${saved}`);
         }
+
+        scheduleUnlock(restoringRef);
       }
     }
 
-    const isTrackedList = normalizedRoutes.some((route) => route.list === currentPath);
-
-    if (isTrackedList && !location.search && !isReturningToList) {
-      clearSearch(currentPath, storage, keyPrefix);
-    }
-
     if (cleanupOnLeave) {
-      const leftListFlow =
-        !!leavingConfig && !isLeavingTrackedList && prevPath !== currentPath;
+      const isTrackedList = normalizedRoutes.some((route) => route.list === prevPath);
+      const isCurrentInSameFlow = !!findPreserveConfig(currentPath, normalizedRoutes) || isLeavingTrackedList;
 
-      if (leftListFlow) {
+      if (isTrackedList && !isCurrentInSameFlow && prevPath !== currentPath) {
         clearSearch(prevPath, storage, keyPrefix);
       }
     }
@@ -125,10 +156,12 @@ export function ListQueryPreserve({
     previousRef.current = location;
   }, [
     cleanupOnLeave,
+    forceRestoreOnListMount,
     keyPrefix,
     location,
     navigate,
     normalizedRoutes,
+    preferCurrentSearch,
     restoreStrategy,
     shouldPreserve,
     storage
