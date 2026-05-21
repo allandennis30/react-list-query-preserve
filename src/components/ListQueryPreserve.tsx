@@ -3,6 +3,10 @@ import { Location, useLocation, useNavigate } from "react-router-dom";
 import { PreserveRouteConfig, RestoreStrategy, ShouldPreserve } from "../types";
 import { clearSearch, getSearch, normalizePath, saveSearch } from "../utils/storage";
 import { findListConfigForDetail, findPreserveConfig, matchesDetailRoute } from "../utils/routes";
+import {
+  ListQueryPreserveContext,
+  ListQueryPreserveContextValue
+} from "../context/ListQueryPreserveContext";
 
 type Props = {
   children: ReactNode;
@@ -14,8 +18,6 @@ type Props = {
   keyPrefix?: string;
 };
 
-const DEFAULT_SHOULD_PRESERVE: ShouldPreserve = () => true;
-
 function normalizeRoutes(routes: PreserveRouteConfig[]) {
   return routes.map((route) => ({
     list: normalizePath(route.list),
@@ -23,33 +25,26 @@ function normalizeRoutes(routes: PreserveRouteConfig[]) {
   }));
 }
 
-function scheduleUnlock(restoringRef: React.MutableRefObject<boolean>) {
-  try {
-    Promise.resolve().then(() => {
-      restoringRef.current = false;
-    });
-  } catch {
-    setTimeout(() => {
-      restoringRef.current = false;
-    }, 0);
-  }
-}
-
 export function ListQueryPreserve({
   children,
   routes,
   restoreStrategy = "router",
   storage,
-  shouldPreserve = DEFAULT_SHOULD_PRESERVE,
+  shouldPreserve = () => true,
   cleanupOnLeave = false,
   keyPrefix
 }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
   const previousRef = useRef<Location | null>(null);
-  const restoringRef = useRef(false);
+  const restoredRef = useRef<{ pathname: string; search: string } | null>(null);
 
   const normalizedRoutes = useMemo(() => normalizeRoutes(routes), [routes]);
+
+  const contextValue = useMemo<ListQueryPreserveContextValue>(
+    () => ({ restoreStrategy, storage, keyPrefix, normalizedRoutes, shouldPreserve }),
+    [restoreStrategy, storage, keyPrefix, normalizedRoutes, shouldPreserve]
+  );
 
   useLayoutEffect(() => {
     const previous = previousRef.current;
@@ -62,60 +57,69 @@ export function ListQueryPreserve({
     const prevPath = normalizePath(previous.pathname);
     const currentPath = normalizePath(location.pathname);
 
+    // Skip if this render was caused by our own restore navigate
+    const alreadyRestored =
+      restoredRef.current?.pathname === currentPath &&
+      restoredRef.current?.search === location.search;
+
+    if (alreadyRestored) {
+      previousRef.current = location;
+      return;
+    }
+
     const canPreservePrev = shouldPreserve(prevPath);
     const canPreserveCurrent = shouldPreserve(currentPath);
 
     const leavingConfig = findPreserveConfig(prevPath, normalizedRoutes);
-
     const isLeavingTrackedList =
       !!leavingConfig && matchesDetailRoute(currentPath, leavingConfig.details);
 
-    if (canPreservePrev && isLeavingTrackedList && previous.search) {
-      saveSearch(prevPath, previous.search, storage, keyPrefix);
+    // Persist idempotently: save if had search, clear if search was empty
+    if (canPreservePrev && isLeavingTrackedList) {
+      if (previous.search) {
+        saveSearch(prevPath, previous.search, storage, keyPrefix);
+      } else {
+        clearSearch(prevPath, storage, keyPrefix);
+      }
     }
+
+    const shouldRestoreURL = restoreStrategy === "router";
 
     const currentDetailConfig = findListConfigForDetail(currentPath, normalizedRoutes);
     const isCurrentDetail = !!currentDetailConfig;
 
     if (
-      restoreStrategy === "router" &&
+      shouldRestoreURL &&
       canPreserveCurrent &&
       isCurrentDetail &&
-      !location.search &&
-      !restoringRef.current
+      !location.search
     ) {
       const savedForDetail = getSearch(currentDetailConfig.list, storage, keyPrefix);
 
       if (savedForDetail) {
-        const normalizedSaved = savedForDetail.startsWith("?")
-          ? savedForDetail
-          : `?${savedForDetail}`;
+        const search = savedForDetail.startsWith("?") ? savedForDetail : `?${savedForDetail}`;
 
-        restoringRef.current = true;
+        restoredRef.current = { pathname: location.pathname, search };
 
         navigate(
-          {
-            pathname: location.pathname,
-            search: normalizedSaved
-          },
+          { pathname: location.pathname, search },
           { replace: true }
         );
 
-        scheduleUnlock(restoringRef);
+        previousRef.current = location;
+        return;
       }
     }
 
     const returningConfig = findPreserveConfig(currentPath, normalizedRoutes);
-
     const isReturningToList =
       !!returningConfig && matchesDetailRoute(prevPath, returningConfig.details);
 
     if (
-      restoreStrategy === "router" &&
+      shouldRestoreURL &&
       canPreserveCurrent &&
       isReturningToList &&
-      !location.search &&
-      !restoringRef.current
+      !location.search
     ) {
       const saved = getSearch(currentPath, storage, keyPrefix);
 
@@ -123,17 +127,15 @@ export function ListQueryPreserve({
         const search = saved.startsWith("?") ? saved : `?${saved}`;
 
         if (!(location.pathname === currentPath && location.search === search)) {
-          restoringRef.current = true;
+          restoredRef.current = { pathname: currentPath, search };
 
           navigate(
-            {
-              pathname: currentPath,
-              search
-            },
+            { pathname: currentPath, search },
             { replace: true }
           );
 
-          scheduleUnlock(restoringRef);
+          previousRef.current = location;
+          return;
         }
       }
     }
@@ -145,8 +147,11 @@ export function ListQueryPreserve({
     }
 
     if (cleanupOnLeave) {
+      const returningConfigForPrev = findPreserveConfig(currentPath, normalizedRoutes);
       const leftListFlow =
-        !!leavingConfig && !isLeavingTrackedList && prevPath !== currentPath;
+        !!leavingConfig &&
+        !isLeavingTrackedList &&
+        !returningConfigForPrev;
 
       if (leftListFlow) {
         clearSearch(prevPath, storage, keyPrefix);
@@ -165,5 +170,9 @@ export function ListQueryPreserve({
     storage
   ]);
 
-  return <>{children}</>;
+  return (
+    <ListQueryPreserveContext.Provider value={contextValue}>
+      {children}
+    </ListQueryPreserveContext.Provider>
+  );
 }

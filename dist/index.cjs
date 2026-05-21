@@ -27,7 +27,7 @@ __export(index_exports, {
 module.exports = __toCommonJS(index_exports);
 
 // src/components/ListQueryPreserve.tsx
-var import_react = require("react");
+var import_react2 = require("react");
 var import_react_router_dom2 = require("react-router-dom");
 
 // src/utils/storage.ts
@@ -86,41 +86,40 @@ function findListConfigForDetail(pathname, routes) {
   return routes.find((route) => matchesDetailRoute(normalizedPath, route.details));
 }
 
+// src/context/ListQueryPreserveContext.tsx
+var import_react = require("react");
+var ListQueryPreserveContext = (0, import_react.createContext)(null);
+function useListQueryPreserveContext() {
+  return (0, import_react.useContext)(ListQueryPreserveContext);
+}
+
 // src/components/ListQueryPreserve.tsx
 var import_jsx_runtime = require("react/jsx-runtime");
-var DEFAULT_SHOULD_PRESERVE = () => true;
 function normalizeRoutes(routes) {
   return routes.map((route) => ({
     list: normalizePath(route.list),
     details: route.details
   }));
 }
-function scheduleUnlock(restoringRef) {
-  try {
-    Promise.resolve().then(() => {
-      restoringRef.current = false;
-    });
-  } catch {
-    setTimeout(() => {
-      restoringRef.current = false;
-    }, 0);
-  }
-}
 function ListQueryPreserve({
   children,
   routes,
   restoreStrategy = "router",
   storage,
-  shouldPreserve = DEFAULT_SHOULD_PRESERVE,
+  shouldPreserve = () => true,
   cleanupOnLeave = false,
   keyPrefix
 }) {
   const location = (0, import_react_router_dom2.useLocation)();
   const navigate = (0, import_react_router_dom2.useNavigate)();
-  const previousRef = (0, import_react.useRef)(null);
-  const restoringRef = (0, import_react.useRef)(false);
-  const normalizedRoutes = (0, import_react.useMemo)(() => normalizeRoutes(routes), [routes]);
-  (0, import_react.useLayoutEffect)(() => {
+  const previousRef = (0, import_react2.useRef)(null);
+  const restoredRef = (0, import_react2.useRef)(null);
+  const normalizedRoutes = (0, import_react2.useMemo)(() => normalizeRoutes(routes), [routes]);
+  const contextValue = (0, import_react2.useMemo)(
+    () => ({ restoreStrategy, storage, keyPrefix, normalizedRoutes, shouldPreserve }),
+    [restoreStrategy, storage, keyPrefix, normalizedRoutes, shouldPreserve]
+  );
+  (0, import_react2.useLayoutEffect)(() => {
     const previous = previousRef.current;
     if (!previous) {
       previousRef.current = location;
@@ -128,46 +127,52 @@ function ListQueryPreserve({
     }
     const prevPath = normalizePath(previous.pathname);
     const currentPath = normalizePath(location.pathname);
+    const alreadyRestored = restoredRef.current?.pathname === currentPath && restoredRef.current?.search === location.search;
+    if (alreadyRestored) {
+      previousRef.current = location;
+      return;
+    }
     const canPreservePrev = shouldPreserve(prevPath);
     const canPreserveCurrent = shouldPreserve(currentPath);
     const leavingConfig = findPreserveConfig(prevPath, normalizedRoutes);
     const isLeavingTrackedList = !!leavingConfig && matchesDetailRoute(currentPath, leavingConfig.details);
-    if (canPreservePrev && isLeavingTrackedList && previous.search) {
-      saveSearch(prevPath, previous.search, storage, keyPrefix);
+    if (canPreservePrev && isLeavingTrackedList) {
+      if (previous.search) {
+        saveSearch(prevPath, previous.search, storage, keyPrefix);
+      } else {
+        clearSearch(prevPath, storage, keyPrefix);
+      }
     }
+    const shouldRestoreURL = restoreStrategy === "router";
     const currentDetailConfig = findListConfigForDetail(currentPath, normalizedRoutes);
     const isCurrentDetail = !!currentDetailConfig;
-    if (restoreStrategy === "router" && canPreserveCurrent && isCurrentDetail && !location.search && !restoringRef.current) {
+    if (shouldRestoreURL && canPreserveCurrent && isCurrentDetail && !location.search) {
       const savedForDetail = getSearch(currentDetailConfig.list, storage, keyPrefix);
       if (savedForDetail) {
-        const normalizedSaved = savedForDetail.startsWith("?") ? savedForDetail : `?${savedForDetail}`;
-        restoringRef.current = true;
+        const search = savedForDetail.startsWith("?") ? savedForDetail : `?${savedForDetail}`;
+        restoredRef.current = { pathname: location.pathname, search };
         navigate(
-          {
-            pathname: location.pathname,
-            search: normalizedSaved
-          },
+          { pathname: location.pathname, search },
           { replace: true }
         );
-        scheduleUnlock(restoringRef);
+        previousRef.current = location;
+        return;
       }
     }
     const returningConfig = findPreserveConfig(currentPath, normalizedRoutes);
     const isReturningToList = !!returningConfig && matchesDetailRoute(prevPath, returningConfig.details);
-    if (restoreStrategy === "router" && canPreserveCurrent && isReturningToList && !location.search && !restoringRef.current) {
+    if (shouldRestoreURL && canPreserveCurrent && isReturningToList && !location.search) {
       const saved = getSearch(currentPath, storage, keyPrefix);
       if (saved) {
         const search = saved.startsWith("?") ? saved : `?${saved}`;
         if (!(location.pathname === currentPath && location.search === search)) {
-          restoringRef.current = true;
+          restoredRef.current = { pathname: currentPath, search };
           navigate(
-            {
-              pathname: currentPath,
-              search
-            },
+            { pathname: currentPath, search },
             { replace: true }
           );
-          scheduleUnlock(restoringRef);
+          previousRef.current = location;
+          return;
         }
       }
     }
@@ -176,7 +181,8 @@ function ListQueryPreserve({
       clearSearch(currentPath, storage, keyPrefix);
     }
     if (cleanupOnLeave) {
-      const leftListFlow = !!leavingConfig && !isLeavingTrackedList && prevPath !== currentPath;
+      const returningConfigForPrev = findPreserveConfig(currentPath, normalizedRoutes);
+      const leftListFlow = !!leavingConfig && !isLeavingTrackedList && !returningConfigForPrev;
       if (leftListFlow) {
         clearSearch(prevPath, storage, keyPrefix);
       }
@@ -192,25 +198,32 @@ function ListQueryPreserve({
     shouldPreserve,
     storage
   ]);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, { children });
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ListQueryPreserveContext.Provider, { value: contextValue, children });
 }
 
 // src/hooks/usePreservedSearchParams.ts
-var import_react2 = require("react");
+var import_react3 = require("react");
 var import_react_router_dom3 = require("react-router-dom");
 function usePreservedSearchParams(options) {
+  const ctx = useListQueryPreserveContext();
   const location = (0, import_react_router_dom3.useLocation)();
   const [searchParams, setSearchParams] = (0, import_react_router_dom3.useSearchParams)();
-  const effectiveParams = (0, import_react2.useMemo)(() => {
+  const effectiveStorage = options?.storage ?? ctx?.storage;
+  const effectiveKeyPrefix = options?.keyPrefix ?? ctx?.keyPrefix;
+  const effectiveParams = (0, import_react3.useMemo)(() => {
     if (location.search) {
       return searchParams;
     }
-    const preserved = getSearch(normalizePath(location.pathname), options?.storage, options?.keyPrefix);
+    const preserved = getSearch(
+      normalizePath(location.pathname),
+      effectiveStorage,
+      effectiveKeyPrefix
+    );
     if (!preserved) {
       return searchParams;
     }
     return new URLSearchParams(preserved.startsWith("?") ? preserved.slice(1) : preserved);
-  }, [location.pathname, location.search, options?.keyPrefix, options?.storage, searchParams]);
+  }, [location.pathname, location.search, effectiveStorage, effectiveKeyPrefix, searchParams]);
   return [effectiveParams, setSearchParams];
 }
 var useEffectiveSearchParams = usePreservedSearchParams;

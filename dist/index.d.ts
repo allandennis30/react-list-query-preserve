@@ -25,6 +25,7 @@ type Options = {
     keyPrefix?: string;
 };
 declare function usePreservedSearchParams(options?: Options): readonly [URLSearchParams, react_router.SetURLSearchParams];
+/** @deprecated Use `usePreservedSearchParams`. */
 declare const useEffectiveSearchParams: typeof usePreservedSearchParams;
 
 export { ListQueryPreserve, type PreserveRouteConfig, type RestoreStrategy, type ShouldPreserve, useEffectiveSearchParams, usePreservedSearchParams };

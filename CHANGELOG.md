@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [1.1.0] - 2026-05-21
+
+### Fixed
+
+- `restoreStrategy="memory"` now respects its documented contract: URL is never altered by the component; `usePreservedSearchParams` is the sole interface for reading preserved params virtually.
+- Stale search is no longer restored after the user clears all filters and navigates to a detail: leaving a tracked list with no search now clears storage instead of leaving old data behind.
+- URL restore is now idempotent via an identity-based guard (`restoredRef`), replacing the fragile microtask timing (`scheduleUnlock`). Eliminates the risk of duplicate `navigate` calls under React 18 concurrent features and React StrictMode.
+- `cleanupOnLeave` no longer clears storage when transitioning directly between two tracked list routes; it only clears when leaving the list/detail flow entirely.
+
+### Changed
+
+- `usePreservedSearchParams` now reads `storage` and `keyPrefix` from the `ListQueryPreserve` context when available, making the hook aware of the configured strategy. Passing `options` still overrides context values (backward compatible).
+- Internal `ListQueryPreserveContext` created to propagate configuration from component to hook.
+
+### Deprecated
+
+- `useEffectiveSearchParams` — use `usePreservedSearchParams` instead. The alias remains exported for backward compatibility.
+
+[1.1.0]: https://github.com/allandennis30/react-list-query-preserve/releases/tag/v1.1.0
+
 ## [1.0.0] - 2026-05-18
 
 ### Added
